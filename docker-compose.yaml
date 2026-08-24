@@ -11,8 +11,10 @@ services:
       # - ./certs/fullchain.pem:/etc/nginx/ssl/fullchain.pem:ro
       # - ./certs/privkey.pem:/etc/nginx/ssl/privkey.pem:ro
     depends_on:
-      - mia
-      - warcraft3sounds
+      mia:
+        condition: service_healthy
+      warcraft3sounds:
+        condition: service_healthy
     restart: unless-stopped
 
   mia:
