@@ -59,7 +59,7 @@ services:
       POSTGRES_PASSWORD: ${GOAT_DB_PASSWORD}
       POSTGRES_DB: goatcounter
     volumes:
-      - ${USER_PATH}/postgres:/var/lib/postgresql/data
+      - postgres-data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U goatcounter -d goatcounter"]
       interval: 5s
@@ -87,3 +87,6 @@ services:
       GOATCOUNTER_TLS: "http"
     volumes:
       - ${USER_PATH}/goatcounter/app-data:/home/goatcounter/goatcounter-data
+
+volumes:
+  postgres-data:
