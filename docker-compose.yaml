@@ -82,7 +82,14 @@ services:
     environment:
       # First site: http://stats.localhost or
       # docker compose exec goatcounter goatcounter db create site -vhost=stats.localhost -user.email=...
-      GOATCOUNTER_DB: "postgresql+postgresql://goatcounter:${GOAT_DB_PASSWORD}@db:5432/goatcounter?sslmode=disable"
+      # PG* avoids putting the password in a URL (special chars break net/url userinfo).
+      GOATCOUNTER_DB: postgresql+
+      PGHOST: db
+      PGPORT: "5432"
+      PGDATABASE: goatcounter
+      PGUSER: goatcounter
+      PGPASSWORD: ${GOAT_DB_PASSWORD}
+      PGSSLMODE: disable
       GOATCOUNTER_LISTEN: ":8080"
       GOATCOUNTER_TLS: "http"
     volumes:
