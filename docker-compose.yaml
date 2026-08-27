@@ -1,0 +1,121 @@
+services:
+
+  nginx:
+    image: nginx:alpine # alpine => more lightweight than the full nginx image
+    container_name: nginx
+    ports:
+      - 80:80
+      - 443:443 # TLS for host traffic only; backends on the Docker network stay HTTP
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf
+      - ./certs/fullchain.pem:/etc/nginx/ssl/fullchain.pem:ro
+      - ./certs/privkey.pem:/etc/nginx/ssl/privkey.pem:ro
+    depends_on:
+      mia:
+        condition: service_healthy
+      warcraft3sounds:
+        condition: service_healthy
+      goatcounter:
+        condition: service_healthy
+    restart: unless-stopped
+
+  mia:
+    build: ../mia
+    container_name: mia
+    restart: unless-stopped
+    depends_on:
+      db-mia:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 90s
+    environment:
+      - NODE_ENV=production
+      - DATABASE-URI=postgres://mia:${MIA_DB_PASSWORD}@db-mia:5432/mia?sslmode=disable
+    volumes:
+      - ${USER_PATH}/mia/data/:/root/mia/data/
+      - ${USER_PATH}/mia/plugins/:/root/mia/plugins/
+
+  db-mia:
+    image: postgres:15-alpine
+    container_name: db-mia
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: mia
+      POSTGRES_PASSWORD: ${MIA_DB_PASSWORD}
+      POSTGRES_DB: mia
+    volumes:
+      - volume-postgres-mia:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mia -d mia"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  warcraft3sounds:
+    build: ../warcraft3sounds
+    container_name: warcraft3sounds
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    environment:
+      - NODE_ENV=production
+    volumes:
+      - ${USER_PATH}/warcraft3sounds/sounds/:/root/warcraft3sounds/sounds/
+      - ${USER_PATH}/warcraft3sounds/logs/:/root/warcraft3sounds/logs/
+
+  db-goatcounter:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: goatcounter
+      POSTGRES_PASSWORD: ${GOAT_DB_PASSWORD}
+      POSTGRES_DB: goatcounter
+    volumes:
+      - volume-postgres-goatcounter:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U goatcounter -d goatcounter"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  goatcounter:
+    image: arp242/goatcounter
+    restart: unless-stopped
+    depends_on:
+      db-goatcounter:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    environment:
+      # First site: http://stats.localhost or
+      # docker compose exec goatcounter goatcounter db create site -vhost=stats.localhost -user.email=...
+      # PG* avoids putting the password in a URL (special chars break net/url userinfo).
+      GOATCOUNTER_DB: postgresql+
+      PGHOST: db-goatcounter
+      PGPORT: "5432"
+      PGDATABASE: goatcounter
+      PGUSER: goatcounter
+      PGPASSWORD: ${GOAT_DB_PASSWORD}
+      PGSSLMODE: disable
+      GOATCOUNTER_LISTEN: ":8080"
+      GOATCOUNTER_TLS: "http"
+    volumes:
+      - ${USER_PATH}/goatcounter/app-data:/home/goatcounter/goatcounter-data
+
+volumes:
+  volume-postgres-goatcounter:
+  volume-postgres-mia:

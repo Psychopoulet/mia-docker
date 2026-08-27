@@ -1,0 +1,63 @@
+# from https://blog.stephane-robert.info/docs/pipeline-cicd/github/
+# and  https://apprendre-la-programmation.net/configurer-ci-github-actions/
+
+# ══════════════════════════════════════════════════════════════════════════════
+# METADATA
+# ══════════════════════════════════════════════════════════════════════════════
+
+name: Tests                                 # Display name in the GitHub UI
+run-name: Tests for ${{ github.ref_name }}  # Dynamic run name
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true                  # Cancel in-progress workflows of the same ref
+
+# ══════════════════════════════════════════════════════════════════════════════
+# WHEN? (Trigger events)
+# ══════════════════════════════════════════════════════════════════════════════
+
+on:
+  pull_request:
+    branches: [ master ]                    # On PR targeting master
+  workflow_dispatch:                        # Manual trigger in the UI
+
+# ══════════════════════════════════════════════════════════════════════════════
+# SECURITY (Permissions)
+# ══════════════════════════════════════════════════════════════════════════════
+
+permissions:
+  contents: read                            # Read repository contents (least privilege)
+
+# ══════════════════════════════════════════════════════════════════════════════
+# JOBS (Work units)
+# ══════════════════════════════════════════════════════════════════════════════
+
+jobs:
+
+  require-develop-source:
+
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+
+    steps:
+
+      - name: Ensure steps to avoid vulnerabilities
+        uses: step-security/harden-runner@ab7a9404c0f3da075243ca237b5fac12c98deaa5 # curl -s https://api.github.com/repos/step-security/harden-runner/commits/v2.19.3 | jq -r .sha
+        with:
+          egress-policy: audit
+
+      - name: Setup the repo
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # curl -s https://api.github.com/repos/actions/checkout/commits/v6.0.2 | jq -r .sha
+        with:
+          fetch-depth: 0                    # gitleaks uses a git rev range (e.g. push before..after); depth 1 often misses those commits
+
+      - name: Scan for secrets leaks
+        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # curl -s https://api.github.com/repos/gitleaks/gitleaks-action/commits/v2.3.9 | jq -r .sha
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Only allow PRs from develop into master
+        run: |
+          if [ "${{ github.base_ref }}" = "master" ] && [ "${{ github.head_ref }}" != "develop" ]; then
+            echo "::error::Merges into master are only allowed from the 'develop' branch (got '${{ github.head_ref }}')."
+            exit 1
+          fi
